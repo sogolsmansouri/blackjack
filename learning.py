@@ -285,14 +285,13 @@ def draw_text(game, fitness, size):
     screen.blit(score_label, (WIN_WIDTH - score_label.get_width() - 15, 700))
 
 
-def main_loop(games, genomes, nets):
+def genetic_algorithm(games, genomes, nets):
     while len(games) > 0:
         pygame.event.pump()
-        # greatest_fitness = max(genomes, key=attrgetter('fitness'))
-        # best_game = games[genomes.index(greatest_fitness)]
+
         best_game = games[0]
         pygame.display.update()
-        # screen.fill((0, 128, 0))
+
         screen.blit(bg, (0, 0))
         clock.tick(100)
         draw_cards(best_game)
@@ -327,7 +326,7 @@ def main_loop(games, genomes, nets):
 gen = 0
 
 
-def main(genomes=None, config=None):
+def blackjack_genetic_algorithm(genomes=None, config=None):
     global gen
     if config is None:
         config = []
@@ -345,10 +344,10 @@ def main(genomes=None, config=None):
         g.fitness = 0
         ge.append(g)
         games.append(Game())
-    main_loop(games, ge, nets)
+    genetic_algorithm(games, ge, nets)
 
 
-def run(config_file):
+def take_action(config_file):
     """
     runs the NEAT algorithm to train a neural network to play blackjack.
     :param config_file: location of config file
@@ -368,17 +367,14 @@ def run(config_file):
     # p.add_reporter(neat.Checkpointer(5))
 
     # Run for up to 50 generations.
-    winner = p.run(main, 50)
+    winner = p.run(blackjack_genetic_algorithm, 50)
 
     # show final stats
     print('\nBest genome:\n{!s}'.format(winner))
     print(f'Win percentage: {winner.fitness * 100}%')
 
 
-if __name__ == '__main__':
-    local_dir = os.path.dirname(__file__)
-    config_path = os.path.join(local_dir, 'config-feedforward.txt')
-    run(config_path)
-    # main()
 
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/
+
+
+

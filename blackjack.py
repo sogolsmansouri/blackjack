@@ -3,8 +3,10 @@ Blackjack documentation
 """
 import copy
 import enum
+import os
 import sys
 import stats
+import learning
 
 from card_deck import Deck, Hand
 from constants import DEALER_UP_CARD_FEATURE, PLAYER_HAND_FEATURE, PLAYER_RESULT_FEATURE, \
@@ -21,6 +23,7 @@ class Strategy(enum.Enum):
     simple = 2
     basic = 3
     counting = 4
+    ml = 5
 
 
 class GameResult(enum.Enum):
@@ -38,6 +41,8 @@ def find_strategy(game_strategy):
         strategy = Strategy.basic
     elif game_strategy == "counting":
         strategy = Strategy.counting
+    elif game_strategy == "ml":
+        strategy = Strategy.ml
     else:
         strategy = None
 
@@ -70,8 +75,10 @@ def action_strategy(strategy, player_hand, dealer_up_card, deck):
         action = counting.take_action(player_hand, dealer_up_card)
         if action == "hit":
             bet_value = counting.get_bet_value(RUNNING_COUNT, deck.total_cards())
-    # elif strategy.value == 5:
-    #     action = learning.take_action(player_hand, dealer_up_card)
+    elif strategy.value == 5:
+        local_dir = os.path.dirname(__file__)
+        config_path = os.path.join(local_dir, 'config-feedforward.txt')
+        action = learning.take_action(config_path)
 
     return action, bet_value
 
@@ -185,8 +192,8 @@ def simulate(strategy):
         if deck.total_cards() <= NUM_DECKS * 13:
             deck = Deck(NUM_DECKS)
 
-        # if strategy == "ml":
-        #     result, return_amount = play(deck, strategy.random)
+        if strategy == "ml":
+            result, return_amount = play(deck, strategy.random)
 
         result, return_amount = play(deck, strategy)
         if result == "win":
