@@ -367,7 +367,7 @@ def take_action(config_file):
     # p.add_reporter(neat.Checkpointer(5))
 
     # Run for up to 50 generations.
-    winner = p.run(blackjack_genetic_algorithm, 50)
+    winner = p.run(blackjack_genetic_algorithm, 10)
 
     # show final stats
     print('\nBest genome:\n{!s}'.format(winner))

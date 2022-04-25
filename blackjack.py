@@ -188,20 +188,20 @@ def simulate(strategy):
 
     global RUNNING_COUNT, PLAYER_MONEY
 
-    for sim in range(NUM_SIMULATIONS):
-        if deck.total_cards() <= NUM_DECKS * 13:
-            deck = Deck(NUM_DECKS)
-
-        if strategy == "ml":
-            result, return_amount = play(deck, strategy.random)
-
+    if strategy == "ml":
         result, return_amount = play(deck, strategy)
-        if result == "win":
-            wins += 1
-            PLAYER_MONEY += return_amount
+    else:
+        for sim in range(NUM_SIMULATIONS):
+            if deck.total_cards() <= NUM_DECKS * 13:
+                deck = Deck(NUM_DECKS)
+            result, return_amount = play(deck, strategy)
+    if result == "win":
+        wins += 1
+        PLAYER_MONEY += return_amount
 
-        win_rate = (wins / (sim + 1)) * 100
-        plot_wins.append(win_rate)
+    win_rate = (wins / (sim + 1)) * 100
+    plot_wins.append(win_rate)
+
 
     print("Win percentage for player with {0} strategy = {1:.2f}%".format(strategy.name, win_rate))
     print("Amount after {0} rounds = {1:.2f}".format(NUM_SIMULATIONS, PLAYER_MONEY))
