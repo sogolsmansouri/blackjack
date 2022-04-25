@@ -189,17 +189,19 @@ def simulate(strategy):
     global RUNNING_COUNT, PLAYER_MONEY
 
     if strategy == "ml":
-        result, return_amount = play(deck, strategy)
+        local_dir = os.path.dirname(__file__)
+        config_path = os.path.join(local_dir, 'config-feedforward.txt')
+        win_rate = learning.take_action(config_path)
     else:
         for sim in range(NUM_SIMULATIONS):
             if deck.total_cards() <= NUM_DECKS * 13:
                 deck = Deck(NUM_DECKS)
             result, return_amount = play(deck, strategy)
-    if result == "win":
-        wins += 1
-        PLAYER_MONEY += return_amount
+        if result == "win":
+            wins += 1
+            PLAYER_MONEY += return_amount
 
-    win_rate = (wins / (sim + 1)) * 100
+        win_rate = (wins / (sim + 1)) * 100
     plot_wins.append(win_rate)
 
 
