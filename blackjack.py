@@ -3,16 +3,29 @@ Blackjack documentation
 """
 import copy
 import enum
-import os
 import sys
-import stats
-import learning
+import time
 
+import numpy as np
+
+import stats
+import genetic_algorithm
 from card_deck import Deck, Hand
 from constants import DEALER_UP_CARD_FEATURE, PLAYER_HAND_FEATURE, PLAYER_RESULT_FEATURE, \
     PLAYER_CURRENT_TOTAL, PLAYER_CURRENT_ACTION
 from constants import NUM_SIMULATIONS, CARD_COUNT_VALUES, NUM_DECKS
-from strategies import basic, simple, inexperienced, counting
+from strategies import basic, simple, inexperienced, counting, learning
+
+import tensorflow as tf
+from tensorflow.python.client import device_lib
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
+# print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
+# print(device_lib.list_local_devices())
+# assert tf.test.is_gpu_available()
+# assert tf.test.is_built_with_cuda()
+
 
 PLAYER_MONEY = copy.deepcopy(NUM_SIMULATIONS)
 RUNNING_COUNT = 0
@@ -24,6 +37,7 @@ class Strategy(enum.Enum):
     basic = 3
     counting = 4
     ml = 5
+    ga = 6
 
 
 class GameResult(enum.Enum):
@@ -43,6 +57,8 @@ def find_strategy(game_strategy):
         strategy = Strategy.counting
     elif game_strategy == "ml":
         strategy = Strategy.ml
+    elif game_strategy == "ga":
+        strategy = Strategy.ga
     else:
         strategy = None
 
@@ -60,7 +76,7 @@ def get_enum_value(result):
     return game_result.value
 
 
-def action_strategy(strategy, player_hand, dealer_up_card, deck):
+def action_strategy(strategy, player_hand, dealer_up_card, deck, ml_model=None):
     action = "stand"
     bet_value = 1
     global RUNNING_COUNT
@@ -76,9 +92,15 @@ def action_strategy(strategy, player_hand, dealer_up_card, deck):
         if action == "hit":
             bet_value = counting.get_bet_value(RUNNING_COUNT, deck.total_cards())
     elif strategy.value == 5:
-        local_dir = os.path.dirname(__file__)
-        config_path = os.path.join(local_dir, 'config-feedforward.txt')
-        action = learning.take_action(config_path)
+        player_total = player_hand.get_hand_total()
+        dealer_card_val = dealer_up_card.get_value()
+        player_hand_ace = player_hand.is_soft_total()
+        action = learning.take_action(ml_model, player_total, dealer_card_val, player_hand_ace)
+    elif strategy.value == 6:
+        player_total = player_hand.get_hand_total()
+        dealer_card_val = dealer_up_card.get_value()
+        player_hand_ace = player_hand.is_soft_total()
+        action = learning.take_action(ml_model, player_total, dealer_card_val, player_hand_ace)
 
     return action, bet_value
 
@@ -125,7 +147,7 @@ def game_tied(p_total, d_total):
     return False
 
 
-def play(deck, strategy):
+def play(deck, strategy, ml_model=None):
     global RUNNING_COUNT, PLAYER_MONEY
     curr_totals = []
 
@@ -134,14 +156,14 @@ def play(deck, strategy):
     player_total = player_hand.get_hand_total()
     curr_totals.append(player_total)
 
-    action, bet_value = action_strategy(strategy, player_hand, dealer_up_card, deck)
+    action, bet_value = action_strategy(strategy, player_hand, dealer_up_card, deck, ml_model)
     while action == "hit" and player_total < 21:
         card = deck.deal()
         player_hand.hand_cards.append(card)
         player_total = player_hand.get_hand_total()
         curr_totals.append(player_total)
         RUNNING_COUNT += CARD_COUNT_VALUES[card.get_face()]
-        action, bet_value = action_strategy(strategy, player_hand, dealer_up_card, deck)
+        action, bet_value = action_strategy(strategy, player_hand, dealer_up_card, deck, ml_model)
 
     PLAYER_MONEY -= bet_value
 
@@ -174,9 +196,14 @@ def play(deck, strategy):
         result = "loss"
         return_amount = -1 * bet_value
 
-    PLAYER_RESULT_FEATURE.append([get_enum_value(result)])
+    curr_result = np.array([get_enum_value(result)])
+    PLAYER_RESULT_FEATURE.append(curr_result)
     PLAYER_CURRENT_TOTAL.append(curr_totals)
-    PLAYER_CURRENT_ACTION.append(action)
+    if action == "hit":
+        action_tag = 1
+    else:
+        action_tag = 0
+    PLAYER_CURRENT_ACTION.append(action_tag)
     return result, return_amount
 
 
@@ -185,37 +212,56 @@ def simulate(strategy):
     deck = Deck()
     plot_wins = []
     win_rate = 0
+    ml_model = None
 
     global RUNNING_COUNT, PLAYER_MONEY
 
-    if strategy == "ml":
-        local_dir = os.path.dirname(__file__)
-        config_path = os.path.join(local_dir, 'config-feedforward.txt')
-        win_rate = learning.take_action(config_path)
-    else:
+    if strategy.name == "ml":
         for sim in range(NUM_SIMULATIONS):
             if deck.total_cards() <= NUM_DECKS * 13:
                 deck = Deck(NUM_DECKS)
-            result, return_amount = play(deck, strategy)
+            result, return_amount = play(deck, strategy.simple)
+
+        ml_model_df = stats.generate_model()
+        ml_model = learning.neural_net(ml_model_df)
+
+    if strategy.name == "ga":
+       ''' for sim in range(NUM_SIMULATIONS):
+            if deck.total_cards() <= NUM_DECKS * 13:
+                deck = Deck(NUM_DECKS)
+            result, return_amount = play(deck, strategy.simple)
+
+        ml_model_df = stats.generate_model()'''
+       genetic_algorithm.run()
+
+    for sim in range(NUM_SIMULATIONS):
+        if deck.total_cards() <= NUM_DECKS * 13:
+            deck = Deck(NUM_DECKS)
+
+        result, return_amount = play(deck, strategy, ml_model)
+
         if result == "win":
             wins += 1
             PLAYER_MONEY += return_amount
 
         win_rate = (wins / (sim + 1)) * 100
-    plot_wins.append(win_rate)
-
+        plot_wins.append(win_rate)
 
     print("Win percentage for player with {0} strategy = {1:.2f}%".format(strategy.name, win_rate))
     print("Amount after {0} rounds = {1:.2f}".format(NUM_SIMULATIONS, PLAYER_MONEY))
 
-    stats.generate_stats()
-    stats.plot_chart(plot_wins)
+    stats.generate_stats(strategy.name)
+    stats.plot_chart(plot_wins, os.path.join("stats", strategy.name))
 
 
 if __name__ == '__main__':
+    start_time = time.time()
     input_strategy = sys.argv[1]
+
     input_strategy = find_strategy(input_strategy)
     if input_strategy is None:
         print("Invalid strategy")
         exit(0)
     simulate(input_strategy)
+    end_time = time.time()
+    print("{0:.2f}".format(end_time - start_time))

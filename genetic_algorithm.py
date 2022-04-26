@@ -4,21 +4,7 @@ import time
 from multiprocessing import Process
 from operator import attrgetter
 
-import pygame
 import neat
-
-WIN_WIDTH = 1300
-WIN_HEIGHT = 900
-
-pygame.init()
-screen = pygame.display.set_mode((WIN_WIDTH, WIN_HEIGHT))
-pygame.display.set_caption('Blackjack')
-myfont = pygame.font.SysFont('monospace', 70)
-smallFont = pygame.font.SysFont('monospace', 30)
-clock = pygame.time.Clock()
-bg = pygame.image.load(os.path.join('textures', 'background.jpg'))
-flipped = pygame.transform.scale(pygame.image.load(os.path.join('textures', 'cardBack.png')), (166, 242))
-pygame.display.flip()
 
 
 class Game:
@@ -162,15 +148,9 @@ class Card:
             self.is_face = True
             self.set_face(value)
             self.value = self.MAX_VALUE
-            img = pygame.image.load(os.path.join('textures', f'{self.face.lower()}_of_{self.suit.lower()}.png'))
-            self.img = pygame.transform.scale(img, (int(img.get_width() / 3), int(img.get_height() / 3)))
+
         elif value == 1:
             self.ace = True
-            img = pygame.image.load(os.path.join('textures', f'ace_of_{self.suit.lower()}.png'))
-            self.img = pygame.transform.scale(img, (int(img.get_width() / 3), int(img.get_height() / 3)))
-        else:
-            img = pygame.image.load(os.path.join('textures', f'{self.value}_of_{self.suit.lower()}.png'))
-            self.img = pygame.transform.scale(img, (int(img.get_width() / 3), int(img.get_height() / 3)))
 
     def __le__(self, other):
         return self.value <= other.value
@@ -243,60 +223,11 @@ def get_sum(cards):
             return sum2
 
 
-def draw_cards(game):
-    x = 10
-    for card in game.player.cards:
-        y = 105 + card.img.get_height()
-        if card.flipped:
-            screen.blit(flipped, (x, y))
-        else:
-            screen.blit(card.img, (x, y))
-        x += card.img.get_width() + 3
-    x = 10
-    for card in game.house.cards:
-        y = 100
-        if card.flipped:
-            screen.blit(flipped, (x, y))
-        else:
-            screen.blit(card.img, (x, y))
-        x += card.img.get_width() + 3
-
-
-def draw_text(game, fitness, size):
-    # score
-    score_label = smallFont.render("Wins: " + str(game.score[0]) + " | Losses: " + str(game.score[1]), True,
-                                   (255, 255, 255))
-    screen.blit(score_label, (WIN_WIDTH - score_label.get_width() - 15, 10))
-
-    # generations
-    score_label = smallFont.render("Gens: " + str(gen - 1), True, (255, 255, 255))
-    screen.blit(score_label, (10, 10))
-
-    # value
-    score_label = smallFont.render("Total: " + str(game.player.total), True, (255, 255, 255))
-    screen.blit(score_label, (10, 50))
-
-    # fitness
-    score_label = smallFont.render("Win Rate: " + str(round(fitness * 100)) + '%', True, (255, 255, 255))
-    screen.blit(score_label, (10, 700))
-
-    # pop size
-    score_label = smallFont.render("Population Size: " + str(size), True, (255, 255, 255))
-    screen.blit(score_label, (WIN_WIDTH - score_label.get_width() - 15, 700))
-
-
-def genetic_algorithm(games, genomes, nets):
+def main_loop(games, genomes, nets):
     while len(games) > 0:
-        pygame.event.pump()
 
         best_game = games[0]
-        pygame.display.update()
 
-        screen.blit(bg, (0, 0))
-        clock.tick(100)
-        draw_cards(best_game)
-        draw_text(best_game, genomes[0].fitness, len(games))
-        pygame.display.flip()
         for i, game in enumerate(games):
             game.run()
 
@@ -304,7 +235,7 @@ def genetic_algorithm(games, genomes, nets):
 
             # AI dies if ratio of losses to wins is greater than 2:1
             if (game.score[0] != 0 and ((game.score[1] / game.score[0] > 2 and game.score[0] + game.score[1] > 50)
-                or (game.score[1] / game.score[0] > 3 and game.score[0] + game.score[1] > 20))) \
+                                        or (game.score[1] / game.score[0] > 3 and game.score[0] + game.score[1] > 20))) \
                     or (game.score[0] == 0 and game.score[1] > 8) or game.score[0] + game.score[1] > 100:
                 genomes.pop(i)
                 nets.pop(i)
@@ -326,7 +257,7 @@ def genetic_algorithm(games, genomes, nets):
 gen = 0
 
 
-def blackjack_genetic_algorithm(genomes=None, config=None):
+def main(genomes=None, config=None):
     global gen
     if config is None:
         config = []
@@ -338,21 +269,17 @@ def blackjack_genetic_algorithm(genomes=None, config=None):
     nets = []
     ge = []
     for i, g in genomes:
-
         net = neat.nn.RecurrentNetwork.create(g, config)
         nets.append(net)
         g.fitness = 0
         ge.append(g)
         games.append(Game())
-    genetic_algorithm(games, ge, nets)
+    main_loop(games, ge, nets)
 
 
-def take_action(config_file):
-    """
-    runs the NEAT algorithm to train a neural network to play blackjack.
-    :param config_file: location of config file
-    :return: None
-    """
+def run():
+    local_dir = os.path.dirname(__file__)
+    config_file = os.path.join(local_dir, 'strategies/config-feedforward.txt')
     config = neat.config.Config(neat.DefaultGenome, neat.DefaultReproduction,
                                 neat.DefaultSpeciesSet, neat.DefaultStagnation,
                                 config_file)
@@ -367,12 +294,11 @@ def take_action(config_file):
     # p.add_reporter(neat.Checkpointer(5))
 
     # Run for up to 50 generations.
-    winner = p.run(blackjack_genetic_algorithm, 10)
+    winner = p.run(main, 50)
 
     # show final stats
     print('\nBest genome:\n{!s}'.format(winner))
     print(f'Win percentage: {winner.fitness * 100}%')
-
 
 
 
